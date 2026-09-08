@@ -1,0 +1,14 @@
+# Data processing & models
+pydantic>=2.7.0
+reportlab>=4.2.0
+faker>=25.0.0
+
+# Document AI & Parsing (step 2 & 3)
+pymupdf>=1.24.0
+
+# Graph & Embeddings (future steps)
+neo4j>=5.20.0
+sentence-transformers>=3.0.0
+
+# Testing
+pytest>=8.2.0
