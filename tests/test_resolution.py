@@ -25,6 +25,14 @@ def test_is_same_company_via_normalized_name():
     )
 
 
+def test_is_same_company_via_fuzzy_matching():
+    # Minor typos without SIREN -> RapidFuzz matches >= 85%
+    assert is_same_company(
+        name_a="Alpha Servises SAS",
+        name_b="Alpha Services SAS",
+    )
+
+
 def test_different_companies_do_not_match():
     # Completely different companies -> False
     assert not is_same_company(

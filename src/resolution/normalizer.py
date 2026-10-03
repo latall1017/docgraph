@@ -1,5 +1,6 @@
 import re
 from typing import Optional
+from rapidfuzz import fuzz
 
 LEGAL_SUFFIXES = [
     r"\bsas\b",
@@ -44,14 +45,20 @@ def is_same_company(
         if len(clean_siren_a) == 9 and clean_siren_a == clean_siren_b:
             return True
 
-    # 2. Normalized name match
+    # 2. Normalized exact match
     norm_a = normalize_company_name(name_a)
     norm_b = normalize_company_name(name_b)
 
     if norm_a and norm_b and norm_a == norm_b:
         return True
 
-    # 3. Substring inclusion if names are long enough (>= 6 chars)
+    # 3. Fuzzy matching with RapidFuzz for typos and minor variations
+    if norm_a and norm_b:
+        similarity = fuzz.token_sort_ratio(norm_a, norm_b)
+        if similarity >= 85.0:
+            return True
+
+    # 4. Substring inclusion if names are long enough (>= 6 chars)
     if len(norm_a) >= 6 and len(norm_b) >= 6:
         if norm_a in norm_b or norm_b in norm_a:
             return True
