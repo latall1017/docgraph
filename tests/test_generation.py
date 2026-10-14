@@ -4,7 +4,7 @@ from src.generation.generator import AnswerGenerator, GroundedAnswer
 
 def test_build_prompt():
     gen = AnswerGenerator()
-    query = "Vérifier la facture FAC-2026-002"
+    query = "Verify invoice FAC-2026-002"
     retrieval_result = {
         "ranked_evidence": [{"file_name": "invoice_FAC-2026-002.pdf", "content": "Total HT : 7 500,00 €"}],
         "graph_audit": {
@@ -26,7 +26,7 @@ def test_build_prompt():
     assert "FAC-2026-002" in prompt
     assert "7500.0" in prompt
     assert "2500.0" in prompt
-    assert "N'invente aucune information" in prompt
+    assert "Do not invent any information" in prompt
 
 
 def test_gemini_generation_live():
@@ -36,7 +36,7 @@ def test_gemini_generation_live():
         return
 
     gen = AnswerGenerator(api_key=api_key)
-    query = "Quelles sont les anomalies sur la facture FAC-2026-002 et les documents justificatifs ?"
+    query = "What are the discrepancies on invoice FAC-2026-002 and supporting documents?"
     retrieval_result = {
         "ranked_evidence": [
             {"file_name": "invoice_FAC-2026-002.pdf", "content": "Total HT : 7 500,00 €"},

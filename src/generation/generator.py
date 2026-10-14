@@ -34,15 +34,15 @@ class GroundedAnswer(BaseModel):
     limitations: List[str] = Field(default_factory=list)
 
 
-SYSTEM_PROMPT = """Tu es un assistant spécialisé dans l'analyse de documents commerciaux et l'audit de facturation.
-Tu dois répondre exclusivement à partir des informations fournies dans le contexte.
+SYSTEM_PROMPT = """You are an assistant specialized in business document analysis and invoice auditing.
+You must answer exclusively based on the provided context.
 
-Règles strictes :
-1. N'invente aucune information.
-2. Si une information est absente, indique-le explicitement dans le champ limitations.
-3. Distingue les faits vérifiés des hypothèses.
-4. Cite précisément les documents et les pages utilisés.
-5. Ne considère pas une anomalie comme une fraude sans preuve suffisante.
+Strict rules:
+1. Do not invent any information.
+2. If an information is missing, explicitly state it in the limitations field.
+3. Distinguish verified facts from assumptions.
+4. Precisely cite used documents and pages.
+5. Do not treat an anomaly as fraud without sufficient evidence.
 """
 
 
@@ -64,36 +64,36 @@ class AnswerGenerator:
         # 1. Format vector passages
         doc_passages = []
         for ev in retrieval_result.get("ranked_evidence", []):
-            doc_passages.append(f"- [{ev.get('file_name', 'document')}] : {ev.get('content')}")
-        passages_text = "\n".join(doc_passages) if doc_passages else "Aucun passage spécifique."
+            doc_passages.append(f"- [{ev.get('file_name', 'document')}]: {ev.get('content')}")
+        passages_text = "\n".join(doc_passages) if doc_passages else "No specific passages found."
 
         # 2. Format graph audit context
         audit = retrieval_result.get("graph_audit")
         if audit:
             graph_lines = [
-                f"- Facture auditée : {audit.get('invoice_id')} (Montant : {audit.get('invoice_amount_ht')} € HT)",
-                f"- Bon de commande associé : {audit.get('po_id')} (Montant : {audit.get('po_amount_ht')} € HT)",
-                f"- Écart constaté : {audit.get('amount_diff')} € HT (Dépassement : {audit.get('exceeds_po')})",
-                f"- Contrat cadre : {audit.get('contract_id')} (Plafond initial : {audit.get('contract_ceiling')} € HT)",
-                f"- Avenant modificateur : {audit.get('amendment_id')} (Plafond effectif : {audit.get('effective_ceiling')} € HT)",
-                f"- Justifié par avenant : {audit.get('justified_by_amendment')}",
+                f"- Audited Invoice: {audit.get('invoice_id')} (Amount: {audit.get('invoice_amount_ht')} EUR)",
+                f"- Associated Purchase Order: {audit.get('po_id')} (Amount: {audit.get('po_amount_ht')} EUR)",
+                f"- Amount Discrepancy: {audit.get('amount_diff')} EUR (Exceeds PO: {audit.get('exceeds_po')})",
+                f"- Framework Contract: {audit.get('contract_id')} (Initial Ceiling: {audit.get('contract_ceiling')} EUR)",
+                f"- Modifying Amendment: {audit.get('amendment_id')} (Effective Ceiling: {audit.get('effective_ceiling')} EUR)",
+                f"- Justified by Amendment: {audit.get('justified_by_amendment')}",
             ]
             graph_text = "\n".join(graph_lines)
         else:
-            graph_text = "Aucune relation de graphe retrouvée."
+            graph_text = "No graph relations found."
 
         return f"""{SYSTEM_PROMPT}
 
-Question :
+Question:
 {query}
 
-Contexte documentaire (passages extraits) :
+Documentary Context (extracted passages):
 {passages_text}
 
-Relations du Knowledge Graph (données vérifiées) :
+Knowledge Graph Relations (verified data):
 {graph_text}
 
-Produis une réponse structurée en respectant scrupuleusement le schéma JSON attendu.
+Produce a structured response strictly following the expected JSON schema.
 """
 
     def generate(self, query: str, retrieval_result: Dict[str, Any]) -> GroundedAnswer:
@@ -115,7 +115,7 @@ Produis une réponse structurée en respectant scrupuleusement le schéma JSON a
         # Fallback if no API key is available
         audit = retrieval_result.get("graph_audit") or {}
         return GroundedAnswer(
-            answer="Audit généré sans appel LLM externe (mode local).",
+            answer="Audit generated without external LLM call (local mode).",
             findings=[Finding(
                 type="amount_difference" if audit.get("exceeds_po") else "compliant",
                 invoice_amount=audit.get("invoice_amount_ht"),
@@ -123,5 +123,5 @@ Produis une réponse structurée en respectant scrupuleusement le schéma JSON a
                 difference=audit.get("amount_diff"),
             )],
             evidence=[],
-            limitations=["Clé API Gemini non configurée."]
+            limitations=["Gemini API key not configured."]
         )
