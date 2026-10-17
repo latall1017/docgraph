@@ -1,4 +1,5 @@
 import os
+import pytest
 from src.generation.generator import AnswerGenerator, GroundedAnswer
 
 
@@ -57,7 +58,13 @@ def test_gemini_generation_live():
         }
     }
 
-    result = gen.generate(query, retrieval_result)
+    try:
+        result = gen.generate(query, retrieval_result)
+    except Exception as e:
+        if "503" in str(e) or "UNAVAILABLE" in str(e):
+            pytest.skip(f"Gemini API temporarily unavailable (503): {e}")
+        raise
+
     assert isinstance(result, GroundedAnswer)
     assert len(result.answer) > 20
     assert len(result.findings) >= 1
