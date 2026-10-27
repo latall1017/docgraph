@@ -29,9 +29,9 @@ class Evidence(BaseModel):
 
 class GroundedAnswer(BaseModel):
     answer: str
-    findings: List[Finding] = Field(default_factory=list)
-    evidence: List[Evidence] = Field(default_factory=list)
-    limitations: List[str] = Field(default_factory=list)
+    findings: List[Finding] = Field(default_factory=list,description="Findings related to the query")
+    evidence: List[Evidence] = Field(default_factory=list,description="Evidence supporting the findings")
+    limitations: List[str] = Field(default_factory=list,description="Limitations of the findings")
 
 
 SYSTEM_PROMPT = """You are an assistant specialized in business document analysis and invoice auditing.
