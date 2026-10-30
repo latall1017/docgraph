@@ -25,6 +25,10 @@ env/
 .coverage
 htmlcov/
 
+# Streamlit
+.streamlit/
+.agents/
+
 # Data generated (keep sample test data, ignore heavy generated outputs)
 data/generated/
 data/cache/
