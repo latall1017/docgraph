@@ -1,3 +1,5 @@
+# Interactive web interface for document auditing, graph inspection, and benchmark visualization.
+
 import os
 import glob
 import pandas as pd
@@ -13,15 +15,14 @@ from src.generation.generator import AnswerGenerator
 
 
 st.set_page_config(
-    page_title="DocGraph - Document Intelligence & Graph RAG",
-    page_icon="📑",
+    page_title="DocGraph - Document Intelligence and Graph RAG",
     layout="wide",
 )
 
 
 @st.cache_resource
 def init_system(corpus_dir: str = "data/synthetic/documents"):
-    """Initializes the multi-hop Knowledge Graph, Vector index, and Hybrid Retriever."""
+    """Loads synthetic documents and prepares the graph and retrieval components."""
     kg = KnowledgeGraph()
     vector_retriever = VectorRetriever()
 
@@ -35,7 +36,7 @@ def init_system(corpus_dir: str = "data/synthetic/documents"):
             for relation in extraction.relations:
                 kg.add_relation(relation)
             vector_retriever.add_document(doc)
-        except Exception as e:
+        except Exception:
             pass
 
     if vector_retriever.chunks:
@@ -50,9 +51,9 @@ def init_system(corpus_dir: str = "data/synthetic/documents"):
 
 kg, vector_retriever, graph_retriever, hybrid_retriever, generator = init_system()
 
-# Sidebar: System status & navigation
-st.sidebar.title("📑 DocGraph")
-st.sidebar.caption("Document Intelligence & Graph RAG Engine")
+# Sidebar: System status and navigation
+st.sidebar.title("DocGraph")
+st.sidebar.caption("Document Intelligence and Graph RAG Engine")
 st.sidebar.markdown("---")
 
 st.sidebar.subheader("System Topology")
@@ -63,16 +64,16 @@ st.sidebar.metric("Indexed Chunks", len(vector_retriever.chunks))
 st.sidebar.markdown("---")
 
 tab_audit, tab_graph, tab_bench = st.tabs([
-    "🔍 Document Audit Assistant",
-    "📊 Knowledge Graph Explorer",
-    "📈 Benchmark & Ablation Study",
+    "Document Audit Assistant",
+    "Knowledge Graph Explorer",
+    "Benchmark and Ablation Study",
 ])
 
 # -------------------------------------------------------------
 # TAB 1: Document Audit Assistant
 # -------------------------------------------------------------
 with tab_audit:
-    st.subheader("Auditing Procurement & Contract Documents")
+    st.subheader("Auditing Procurement and Contract Documents")
     st.markdown(
         "Ask a compliance question or click one of the preset business scenarios below to audit "
         "cross-document anomalies across Invoices, Purchase Orders, Contracts, and Amendments."
@@ -81,17 +82,17 @@ with tab_audit:
     col1, col2, col3, col4 = st.columns(4)
     query_input = ""
 
-    if col1.button("🚨 Beta: Overbilling (+2 500 €)"):
+    if col1.button("Beta: Overbilling (+2 500 EUR)"):
         query_input = "What anomalies exist on invoice FAC-2026-002 and is there any justification?"
-    if col2.button("✅ Gamma: Justified Amendment"):
-        query_input = "Check if invoice FAC-2026-003 complies with contract CTR-2026-GAMMA."
-    if col3.button("🛡️ Alpha: Fully Compliant Order"):
+    if col2.button("Gamma: Justified Amendment"):
+        query_input = "Check if invoice FAC-2026-003 complies with contract CON-003."
+    if col3.button("Alpha: Fully Compliant Order"):
         query_input = "Verify compliance of invoice FAC-2026-001 against purchase order BC-2026-001."
-    if col4.button("⚠️ Delta: Missing Purchase Order"):
+    if col4.button("Delta: Missing Purchase Order"):
         query_input = "Is invoice FAC-2026-004 linked to an approved purchase order?"
 
     user_query = st.text_input(
-        "Enter custom audit question:",
+        "Enter custom audit question: ",
         value=query_input if query_input else "Verify invoice FAC-2026-002",
     )
 
@@ -110,9 +111,9 @@ with tab_audit:
             for f in answer.findings:
                 findings_data.append({
                     "Type": f.type,
-                    "Invoice Amount": f"{f.invoice_amount:,.2f} €" if f.invoice_amount is not None else "N/A",
-                    "Order Amount": f"{f.order_amount:,.2f} €" if f.order_amount is not None else "N/A",
-                    "Discrepancy": f"{f.difference:,.2f} €" if f.difference is not None else "0.00 €",
+                    "Invoice Amount": f"{f.invoice_amount:,.2f} EUR" if f.invoice_amount is not None else "N/A",
+                    "Order Amount": f"{f.order_amount:,.2f} EUR" if f.order_amount is not None else "N/A",
+                    "Discrepancy": f"{f.difference:,.2f} EUR" if f.difference is not None else "0.00 EUR",
                     "Currency": f.currency,
                 })
             st.dataframe(pd.DataFrame(findings_data), use_container_width=True)
@@ -120,32 +121,32 @@ with tab_audit:
         # Multi-hop Graph Trace
         audit = retrieval_result.get("graph_audit")
         if audit and audit.get("status") != "not_found":
-            with st.expander("🔗 Multi-hop Graph Reconciliation Details", expanded=True):
+            with st.expander("Multi-hop Graph Reconciliation Details", expanded=True):
                 g_col1, g_col2, g_col3 = st.columns(3)
                 g_col1.metric("Audited Invoice", audit.get("invoice_id"))
                 g_col2.metric("Linked Purchase Order", audit.get("po_id") or "Missing")
                 g_col3.metric("Governing Contract", audit.get("contract_id") or "None")
 
-                st.markdown(f"- **Invoice Amount:** {audit.get('invoice_amount_ht', 0.0):,.2f} € HT")
-                st.markdown(f"- **Purchase Order Amount:** {audit.get('po_amount_ht', 0.0) or 0.0:,.2f} € HT")
-                st.markdown(f"- **Difference:** {audit.get('amount_diff', 0.0):,.2f} € HT (Exceeds PO: `{audit.get('exceeds_po')}`)")
-                st.markdown(f"- **Effective Ceiling:** {audit.get('effective_ceiling', 0.0) or 0.0:,.2f} € HT")
+                st.markdown(f"- **Invoice Amount:** {audit.get('invoice_amount_ht', 0.0):,.2f} EUR HT")
+                st.markdown(f"- **Purchase Order Amount:** {audit.get('po_amount_ht', 0.0) or 0.0:,.2f} EUR HT")
+                st.markdown(f"- **Difference:** {audit.get('amount_diff', 0.0):,.2f} EUR HT (Exceeds PO: `{audit.get('exceeds_po')}`)")
+                st.markdown(f"- **Effective Ceiling:** {audit.get('effective_ceiling', 0.0) or 0.0:,.2f} EUR HT")
                 st.markdown(f"- **Modifying Amendment:** `{audit.get('amendment_id')}` (Justified: `{audit.get('justified_by_amendment')}`)")
 
-        # Evidence & Provenance
+        # Evidence and Provenance
         if answer.evidence:
-            with st.expander("📄 Document Citations & Provenance", expanded=False):
+            with st.expander("Document Citations and Provenance", expanded=False):
                 for ev in answer.evidence:
                     st.markdown(f"- **[{ev.document_id}]** (Page {ev.page}): *\"{ev.claim}\"*")
 
         if answer.limitations:
-            st.warning("⚠️ **Limitations:** " + " ".join(answer.limitations))
+            st.warning("Limitations: " + " ".join(answer.limitations))
 
 # -------------------------------------------------------------
 # TAB 2: Knowledge Graph Explorer
 # -------------------------------------------------------------
 with tab_graph:
-    st.subheader("Knowledge Graph Entities & Relationships")
+    st.subheader("Knowledge Graph Entities and Relationships")
     st.markdown("Inspect extracted procurement entities and multi-hop relationships.")
 
     nodes_data = []
@@ -170,7 +171,7 @@ with tab_graph:
     st.dataframe(pd.DataFrame(edges_data), use_container_width=True)
 
 # -------------------------------------------------------------
-# TAB 3: Benchmark & Ablation Study
+# TAB 3: Benchmark and Ablation Study
 # -------------------------------------------------------------
 with tab_bench:
     st.subheader("Quantitative Architecture Benchmark")
@@ -190,5 +191,5 @@ with tab_bench:
     ### Key Insights:
     1. **Naive Vector Fails on Multi-hop Queries (0% Success):** Vector search on isolated chunks cannot traverse distant documents (e.g. an amendment referencing only the framework contract, not the invoice).
     2. **Deterministic Graph Traversal Solves Multi-hop:** Traverses `Invoice -> PurchaseOrder -> Contract -> Amendment` with 100% precision.
-    3. **Hybrid RAG Achieves Best Recall (91.7%):** Combines lexical/semantic chunk search with exact graph relationship traversal.
+    3. **Hybrid RAG Achieves Best Recall (91.7%):** Combines lexical and semantic chunk search with exact graph relationship traversal.
     """)
