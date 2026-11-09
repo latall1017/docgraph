@@ -1,3 +1,5 @@
+# FastAPI REST backend exposing health, graph inspection, document ingestion, and audit endpoints.
+
 import os
 import glob
 from typing import Dict, Any, Optional
@@ -15,7 +17,7 @@ from src.generation.generator import AnswerGenerator, GroundedAnswer
 
 app = FastAPI(
     title="DocGraph API",
-    description="Document Intelligence & Knowledge Graph RAG for Business Document Auditing",
+    description="Document Intelligence and Knowledge Graph RAG for Business Document Auditing",
     version="1.0.0",
 )
 
@@ -39,8 +41,8 @@ def load_synthetic_documents(corpus_dir: str = "data/synthetic/documents"):
             for relation in extraction.relations:
                 kg.add_relation(relation)
             vector_retriever.add_document(doc)
-        except Exception as e:
-            print(f"Error loading {pdf_path}: {e}")
+        except Exception:
+            pass
     if vector_retriever.chunks:
         vector_retriever.build_index()
 
@@ -60,6 +62,7 @@ class IngestRequest(BaseModel):
 
 @app.get("/")
 def root():
+    """Returns basic service identification and online status."""
     return {
         "service": "DocGraph API",
         "status": "online",
@@ -69,6 +72,7 @@ def root():
 
 @app.get("/health")
 def health_check():
+    """Returns service health metrics including graph node count and vector chunks."""
     return {
         "status": "healthy",
         "nodes": len(kg.graph.nodes),
@@ -79,6 +83,7 @@ def health_check():
 
 @app.get("/api/graph/stats")
 def graph_stats():
+    """Returns the breakdown of entities and relations currently stored in the graph."""
     node_types: Dict[str, int] = {}
     for _, data in kg.graph.nodes(data=True):
         t = data.get("entity_type", "Unknown")
@@ -99,6 +104,7 @@ def graph_stats():
 
 @app.post("/api/documents/ingest")
 def ingest_document(req: IngestRequest):
+    """Parses a new PDF document, extracts entities and relations, and updates the graph."""
     if not os.path.exists(req.file_path):
         raise HTTPException(status_code=404, detail=f"File not found: {req.file_path}")
 
@@ -127,6 +133,7 @@ def ingest_document(req: IngestRequest):
 
 @app.post("/api/audit")
 def audit_query(req: AuditRequest):
+    """Runs hybrid retrieval and grounded LLM generation to audit procurement documents."""
     retrieval_result = hybrid_retriever.retrieve(req.query, top_k=req.top_k)
     answer: GroundedAnswer = generator.generate(req.query, retrieval_result)
 

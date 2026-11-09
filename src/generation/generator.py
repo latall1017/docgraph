@@ -1,3 +1,5 @@
+# Generates structured and grounded audit answers using Gemini Flash.
+
 import os
 import json
 from typing import List, Optional, Dict, Any
@@ -29,9 +31,9 @@ class Evidence(BaseModel):
 
 class GroundedAnswer(BaseModel):
     answer: str
-    findings: List[Finding] = Field(default_factory=list,description="Findings related to the query")
-    evidence: List[Evidence] = Field(default_factory=list,description="Evidence supporting the findings")
-    limitations: List[str] = Field(default_factory=list,description="Limitations of the findings")
+    findings: List[Finding] = Field(default_factory=list, description="Findings related to the query")
+    evidence: List[Evidence] = Field(default_factory=list, description="Evidence supporting the findings")
+    limitations: List[str] = Field(default_factory=list, description="Limitations of the findings")
 
 
 SYSTEM_PROMPT = """You are an assistant specialized in business document analysis and invoice auditing.
@@ -97,7 +99,7 @@ Produce a structured response strictly following the expected JSON schema.
 """
 
     def generate(self, query: str, retrieval_result: Dict[str, Any]) -> GroundedAnswer:
-        """Generates a structured GroundedAnswer via Gemini 2.0 Flash (with deterministic fallback)."""
+        """Generates a structured GroundedAnswer via Gemini Flash."""
         prompt = self.build_prompt(query, retrieval_result)
 
         if self.client:
