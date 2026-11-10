@@ -1,3 +1,5 @@
+# Benchmark suite evaluating Naive Vector RAG, Graph Only, and Hybrid Graph RAG.
+
 import time
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -114,7 +116,7 @@ def get_benchmark_dataset() -> List[BenchmarkQuery]:
             expected_anomaly=None,
         ),
 
-        # 5. Abstention / Out-of-corpus queries
+        # 5. Abstention and Out-of-corpus queries
         BenchmarkQuery(
             id="ABS-01",
             category="abstention",
@@ -179,7 +181,7 @@ class BenchmarkRunner:
 
             # Check abstention (vector search always returns top-k chunks even if irrelevant)
             if q.category == "abstention":
-                # If top score is below a strict threshold (e.g. 0.70)
+                # If top score is below a strict threshold (e.g. 0.75)
                 max_score = v_res[0]["score"] if v_res else 0.0
                 if max_score < 0.75:
                     v_abstention_correct += 1

@@ -1,3 +1,5 @@
+# Combines dense vector search and deterministic graph traversal using Reciprocal Rank Fusion.
+
 import re
 from typing import List, Dict, Any, Optional
 from src.retrieval.vector_retriever import VectorRetriever
@@ -17,7 +19,7 @@ class HybridRetriever:
         self.graph_retriever = graph_retriever
 
     def retrieve(self, query: str, top_k: int = 3) -> Dict[str, Any]:
-        """Performs hybrid retrieval: vector passages + graph reconciliation."""
+        """Performs hybrid retrieval: vector passages and graph reconciliation."""
         # 1. Dense vector search
         vector_results = self.vector_retriever.search(query, top_k=top_k)
 
