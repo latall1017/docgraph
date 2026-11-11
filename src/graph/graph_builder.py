@@ -1,3 +1,5 @@
+# Builds and manages the directed knowledge graph of documents and relations.
+
 from typing import Dict, List, Optional, Any
 import networkx as nx
 from src.extraction.schema import ExtractedEntity, ExtractedRelation
@@ -37,6 +39,7 @@ class KnowledgeGraph:
         )
 
     def get_node(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves entity node data by identifier."""
         if node_id in self.graph:
             return dict(self.graph.nodes[node_id])
         return None

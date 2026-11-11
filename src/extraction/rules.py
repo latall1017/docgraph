@@ -1,3 +1,5 @@
+# Deterministic rule-based information and relation extraction from parsed documents.
+
 import re
 from typing import Optional
 from src.ingestion.models import ParsedDocument
@@ -5,7 +7,7 @@ from src.extraction.schema import ExtractedEntity, ExtractedRelation, Extraction
 
 
 def parse_currency(amount_str: str) -> float:
-    """Converts a formatted currency string (e.g. '12,500.00') to float."""
+    """Converts a formatted currency string to float."""
     clean = amount_str.replace(" ", "").replace(",", "").replace("€", "").strip()
     return float(clean)
 
