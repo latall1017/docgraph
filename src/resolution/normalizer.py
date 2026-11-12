@@ -1,3 +1,5 @@
+# Entity resolution and normalization for company mentions using exact and fuzzy matching.
+
 import re
 from typing import Optional
 from rapidfuzz import fuzz

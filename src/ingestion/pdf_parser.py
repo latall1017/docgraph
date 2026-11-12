@@ -1,3 +1,5 @@
+# Parses PDF documents into paragraphs and structured table elements using PyMuPDF.
+
 from pathlib import Path
 import pymupdf
 from src.ingestion.models import DocumentElement, ParsedDocument
@@ -34,7 +36,6 @@ def parse_pdf(file_path: str) -> ParsedDocument:
         # 2. Extract text blocks (paragraphs)
         blocks = page.get_text("blocks")
         for b in blocks:
-            # b: (x0, y0, x1, y1, text, block_no, block_type)
             text = b[4].strip()
             if text:
                 elements.append(
