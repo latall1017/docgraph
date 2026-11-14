@@ -1,3 +1,5 @@
+# Business domain schemas for companies, contracts, amendments, purchase orders, and invoices.
+
 from datetime import date
 from typing import List, Optional
 from pydantic import BaseModel
