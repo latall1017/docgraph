@@ -1,3 +1,5 @@
+# Traverses the knowledge graph to perform multi-hop invoice and contract audits.
+
 from typing import Dict, Any, Optional
 from src.graph.graph_builder import KnowledgeGraph
 

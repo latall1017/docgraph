@@ -1,3 +1,5 @@
+# Dense semantic vector retriever using multilingual-e5-small embeddings.
+
 from typing import List, Dict, Any, Optional
 import numpy as np
 from sentence_transformers import SentenceTransformer
