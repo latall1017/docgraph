@@ -153,19 +153,33 @@ def render_package_to_disk(package: ProcurementPackage, base_dir: str):
     """Generates all PDFs of a procurement package into a structured supplier directory."""
     supplier_dir = Path(base_dir) / f"{package.supplier.id}_{package.supplier.name.replace(' ', '_')}"
     supplier_dir.mkdir(parents=True, exist_ok=True)
+    created_files = []
 
     # 1. Contract
     if package.contract:
-        render_contract_pdf(package.contract, package.supplier, str(supplier_dir / f"contract_{package.contract.contract_ref}.pdf"))
+        p = str(supplier_dir / f"contract_{package.contract.contract_ref}.pdf")
+        render_contract_pdf(package.contract, package.supplier, p)
+        created_files.append(p)
 
     # 2. Amendments
     for amend in package.amendments:
-        render_amendment_pdf(amend, package.supplier, str(supplier_dir / f"amendment_{amend.amendment_ref}.pdf"))
+        p = str(supplier_dir / f"amendment_{amend.amendment_ref}.pdf")
+        render_amendment_pdf(amend, package.supplier, p)
+        created_files.append(p)
 
     # 3. Purchase Orders
     for po in package.purchase_orders:
-        render_po_pdf(po, package.supplier, str(supplier_dir / f"po_{po.po_ref}.pdf"))
+        p = str(supplier_dir / f"po_{po.po_ref}.pdf")
+        render_po_pdf(po, package.supplier, p)
+        created_files.append(p)
 
     # 4. Invoices
     for inv in package.invoices:
-        render_invoice_pdf(inv, package.supplier, str(supplier_dir / f"invoice_{inv.invoice_ref}.pdf"))
+        p = str(supplier_dir / f"invoice_{inv.invoice_ref}.pdf")
+        render_invoice_pdf(inv, package.supplier, p)
+        created_files.append(p)
+
+    return created_files
+
+
+generate_package_documents = render_package_to_disk
