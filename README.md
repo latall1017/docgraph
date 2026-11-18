@@ -139,29 +139,26 @@ Key endpoints:
 
 ---
 
-## Repository Structure
+## Project Organization and Where to Look
 
-```
-docgraph/
-├── app.py                      # Streamlit interactive interface
-├── data/
-│   └── synthetic/              # Generated documents and ground truth
-├── requirements.txt            # Dependencies
-├── scripts/
-│   └── generate_dataset.py     # Corpus generation script
-├── src/
-│   ├── api/                    # FastAPI backend
-│   ├── data/                   # Data generation and PDF builders
-│   ├── evaluation/             # Benchmark runner and queries
-│   ├── extraction/             # Rule-based extraction with provenance
-│   ├── generation/             # Grounded answer synthesis
-│   ├── graph/                  # Knowledge graph builder
-│   ├── ingestion/              # Document parser and models
-│   ├── resolution/             # Entity normalizer
-│   ├── retrieval/              # Vector, graph, and hybrid retrievers
-│   └── schemas/                # Domain models
-└── tests/                      # Automated unit and integration tests
-```
+If you are exploring the codebase, here is a simple guide on where to start:
+
+* **Entry Points**:
+  * `app.py`: Streamlit interface (Audit chat, Graph explorer, and Benchmark views).
+  * `src/api/main.py`: FastAPI service exposing `/api/audit` and `/api/graph/stats`.
+
+* **Core Pipeline Modules (`src/`)**:
+  * `src/ingestion/`: PDF text and table extraction using PyMuPDF (`pdf_parser.py`).
+  * `src/extraction/`: Rule-based entity and relation extractor with provenance (`rules.py`).
+  * `src/resolution/`: Supplier name normalization with RapidFuzz (`normalizer.py`).
+  * `src/graph/`: Knowledge graph construction and multi-hop traversal (`graph_builder.py`).
+  * `src/retrieval/`: Vector (`e5-small`), graph, and hybrid RRF retrieval (`hybrid_retriever.py`).
+  * `src/generation/`: Structured synthesis with Gemini Flash (`generator.py`).
+  * `src/evaluation/`: Benchmark runner and 5-category test suite (`benchmark.py`).
+
+* **Tests and Data**:
+  * `tests/`: 29 automated Pytest unit and integration tests covering every component.
+  * `data/synthetic/`: Multi-document PDF packages and ground truth scenarios.
 
 ---
 
