@@ -7,9 +7,27 @@ from src.extraction.schema import ExtractedEntity, ExtractedRelation, Extraction
 
 
 def parse_currency(amount_str: str) -> float:
-    """Converts a formatted currency string to float."""
-    clean = amount_str.replace(" ", "").replace(",", "").replace("€", "").strip()
-    return float(clean)
+    """Converts a formatted currency string to float handling French and international formats."""
+    clean = re.sub(r"[€$£\s\xa0\u202f]", "", amount_str).strip()
+    if not clean:
+        return 0.0
+
+    try:
+        # If both . and , are present
+        if "." in clean and "," in clean:
+            if clean.rfind(",") > clean.rfind("."):
+                # e.g. 1.250,50 -> 1250.50 (French/European format with thousand dot)
+                clean = clean.replace(".", "").replace(",", ".")
+            else:
+                # e.g. 1,250.50 -> 1250.50 (US/UK format with thousand comma)
+                clean = clean.replace(",", "")
+        elif "," in clean:
+            # e.g. 1250,50 or 10 000,00 -> comma is decimal separator
+            clean = clean.replace(",", ".")
+
+        return float(clean)
+    except ValueError:
+        return 0.0
 
 
 def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:

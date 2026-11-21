@@ -78,6 +78,7 @@ class AnswerGenerator:
                 f"- Amount Discrepancy: {audit.get('amount_diff')} EUR (Exceeds PO: {audit.get('exceeds_po')})",
                 f"- Framework Contract: {audit.get('contract_id')} (Initial Ceiling: {audit.get('contract_ceiling')} EUR)",
                 f"- Modifying Amendment: {audit.get('amendment_id')} (Effective Ceiling: {audit.get('effective_ceiling')} EUR)",
+                f"- Cumulative Contract Spend: {audit.get('cumulative_contract_amount')} EUR (Exceeds Cumulative Ceiling: {audit.get('exceeds_contract_cumulative')})",
                 f"- Justified by Amendment: {audit.get('justified_by_amendment')}",
             ]
             graph_text = "\n".join(graph_lines)

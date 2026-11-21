@@ -45,3 +45,15 @@ def test_extract_amendment_modifies_contract():
     rel = res.relations[0]
     assert rel.relation_type == "MODIFIES"
     assert rel.target_id == "CON-003"
+
+
+def test_parse_currency_formats():
+    from src.extraction.rules import parse_currency
+    assert parse_currency("1 250,50 €") == 1250.5
+    assert parse_currency("10 000,00 €") == 10000.0
+    assert parse_currency("10 000.00 €") == 10000.0
+    assert parse_currency("1,250.50 €") == 1250.5
+    assert parse_currency("1.250,50 €") == 1250.5
+    assert parse_currency("7500 €") == 7500.0
+    assert parse_currency("10\xa0000,50 €") == 10000.5
+
