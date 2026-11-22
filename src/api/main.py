@@ -2,6 +2,7 @@
 
 import os
 import glob
+import threading
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
@@ -21,7 +22,8 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Global system state
+# Global system state with thread-safe ingestion lock
+ingest_lock = threading.Lock()
 kg = KnowledgeGraph()
 vector_retriever = VectorRetriever()
 graph_retriever = GraphRetriever(kg)
@@ -29,22 +31,40 @@ hybrid_retriever = HybridRetriever(vector_retriever, graph_retriever)
 generator = AnswerGenerator()
 
 
-def load_synthetic_documents(corpus_dir: str = "data/synthetic/documents"):
-    """Ingests synthetic documents from disk into the Knowledge Graph and Vector index."""
-    pdf_files = glob.glob(os.path.join(corpus_dir, "**/*.pdf"), recursive=True)
-    for pdf_path in pdf_files:
+def load_synthetic_documents(corpus_dir: str = "data/synthetic/documents", cache_dir: str = "data"):
+    """Ingests synthetic documents into Knowledge Graph and Vector index with cache support."""
+    with ingest_lock:
+        kg_cache = os.path.join(cache_dir, "knowledge_graph.json")
+        vec_cache = os.path.join(cache_dir, "vector_cache")
+
+        # Try loading from persistent disk cache
+        kg_loaded = kg.load_from_disk(kg_cache)
+        vec_loaded = vector_retriever.load_from_disk(vec_cache)
+
+        if kg_loaded and vec_loaded and len(kg.graph.nodes) > 0 and len(vector_retriever.chunks) > 0:
+            return
+
+        pdf_files = glob.glob(os.path.join(corpus_dir, "**/*.pdf"), recursive=True)
+        for pdf_path in pdf_files:
+            try:
+                doc = parse_pdf(pdf_path)
+                extraction = extract_from_parsed_document(doc)
+                for entity in extraction.entities:
+                    kg.add_entity(entity)
+                for relation in extraction.relations:
+                    kg.add_relation(relation)
+                vector_retriever.add_document(doc)
+            except Exception:
+                pass
+        if vector_retriever.chunks:
+            vector_retriever.build_index()
+
+        # Persist to disk for fast subsequent startups
         try:
-            doc = parse_pdf(pdf_path)
-            extraction = extract_from_parsed_document(doc)
-            for entity in extraction.entities:
-                kg.add_entity(entity)
-            for relation in extraction.relations:
-                kg.add_relation(relation)
-            vector_retriever.add_document(doc)
+            kg.save_to_disk(kg_cache)
+            vector_retriever.save_to_disk(vec_cache)
         except Exception:
             pass
-    if vector_retriever.chunks:
-        vector_retriever.build_index()
 
 
 # Bootstrap with existing corpus if available
@@ -104,31 +124,39 @@ def graph_stats():
 
 @app.post("/api/documents/ingest")
 def ingest_document(req: IngestRequest):
-    """Parses a new PDF document, extracts entities and relations, and updates the graph."""
+    """Parses a new PDF document, extracts entities and relations, updates the graph, and persists."""
     if not os.path.exists(req.file_path):
         raise HTTPException(status_code=404, detail=f"File not found: {req.file_path}")
 
-    try:
-        doc = parse_pdf(req.file_path)
-        extraction = extract_from_parsed_document(doc)
+    with ingest_lock:
+        try:
+            doc = parse_pdf(req.file_path)
+            extraction = extract_from_parsed_document(doc)
 
-        for entity in extraction.entities:
-            kg.add_entity(entity)
-        for relation in extraction.relations:
-            kg.add_relation(relation)
+            for entity in extraction.entities:
+                kg.add_entity(entity)
+            for relation in extraction.relations:
+                kg.add_relation(relation)
 
-        vector_retriever.add_document(doc)
-        vector_retriever.build_index()
+            vector_retriever.add_document(doc)
+            vector_retriever.build_index()
 
-        return {
-            "status": "success",
-            "file": req.file_path,
-            "entities_extracted": len(extraction.entities),
-            "relations_extracted": len(extraction.relations),
-            "total_graph_nodes": len(kg.graph.nodes),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+            # Persist updated state to disk
+            try:
+                kg.save_to_disk("data/knowledge_graph.json")
+                vector_retriever.save_to_disk("data/vector_cache")
+            except Exception:
+                pass
+
+            return {
+                "status": "success",
+                "file": req.file_path,
+                "entities_extracted": len(extraction.entities),
+                "relations_extracted": len(extraction.relations),
+                "total_graph_nodes": len(kg.graph.nodes),
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
 
 @app.post("/api/audit")

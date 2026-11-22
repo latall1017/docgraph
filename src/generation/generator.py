@@ -68,6 +68,10 @@ class AnswerGenerator:
         for ev in retrieval_result.get("ranked_evidence", []):
             doc_passages.append(f"- [{ev.get('file_name', 'document')}]: {ev.get('content')}")
         passages_text = "\n".join(doc_passages) if doc_passages else "No specific passages found."
+        # Truncate context if exceeding guardrail to prevent token overflow
+        max_context_chars = 4000
+        if len(passages_text) > max_context_chars:
+            passages_text = passages_text[:max_context_chars] + "\n[... Context truncated for token budget ...]"
 
         # 2. Format graph audit context
         audit = retrieval_result.get("graph_audit")
@@ -131,7 +135,14 @@ Produce a structured response strictly following the expected JSON schema.
                     temperature=0.0,
                 ),
             )
-            return GroundedAnswer.model_validate_json(response.text)
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:]
+            if raw_text.startswith("```"):
+                raw_text = raw_text[3:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3]
+            return GroundedAnswer.model_validate_json(raw_text.strip())
 
         # Fallback if no API key is available
         audit = retrieval_result.get("graph_audit") or {}

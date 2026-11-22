@@ -29,6 +29,25 @@ def normalize_company_name(name: str) -> str:
     return cleaned
 
 
+GENERIC_WORDS = {
+    "services",
+    "logistics",
+    "consulting",
+    "solutions",
+    "technologies",
+    "cloud",
+    "group",
+    "groupe",
+    "france",
+    "international",
+    "holding",
+    "transport",
+    "conseil",
+    "systemes",
+    "systems",
+}
+
+
 def is_same_company(
     name_a: str,
     siren_a: Optional[str] = None,
@@ -38,9 +57,11 @@ def is_same_company(
     """
     Determines whether two company mentions point to the same entity.
     Priority 1: SIREN match (hard identifier).
-    Priority 2: Normalized name match.
+    Priority 2: Normalized name exact match.
+    Priority 3: Fuzzy matching with RapidFuzz for minor typos.
+    Priority 4: Safe token set matching (rejecting generic-word false positives).
     """
-    # 1. SIREN match
+    # 1. SIREN match (strict 9 digits)
     if siren_a and siren_b:
         clean_siren_a = re.sub(r"\D", "", siren_a)
         clean_siren_b = re.sub(r"\D", "", siren_b)
@@ -60,9 +81,16 @@ def is_same_company(
         if similarity >= 85.0:
             return True
 
-    # 4. Substring inclusion if names are long enough (>= 6 chars)
-    if len(norm_a) >= 6 and len(norm_b) >= 6:
-        if norm_a in norm_b or norm_b in norm_a:
-            return True
+    # 4. Token set matching (safe alternative to raw substring inclusion)
+    if norm_a and norm_b:
+        tokens_a = set(norm_a.split())
+        tokens_b = set(norm_b.split())
+        shared_tokens = tokens_a & tokens_b
+        # Ensure shared tokens are not solely composed of generic business words
+        distinctive_shared = shared_tokens - GENERIC_WORDS
+        if distinctive_shared:
+            set_ratio = fuzz.token_set_ratio(norm_a, norm_b)
+            if set_ratio >= 90.0:
+                return True
 
     return False

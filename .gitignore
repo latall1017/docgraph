@@ -32,3 +32,5 @@ htmlcov/
 # Data generated (keep sample test data, ignore heavy generated outputs)
 data/generated/
 data/cache/
+data/vector_cache/
+data/knowledge_graph.json

@@ -1,5 +1,7 @@
 # Dense semantic vector retriever using multilingual-e5-small embeddings.
 
+import json
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -17,10 +19,12 @@ class VectorRetriever:
 
     def add_document(self, doc: ParsedDocument):
         """Chunks a parsed document and prepares its text segments for indexing."""
-        for element in doc.elements:
+        for idx, element in enumerate(doc.elements):
             text = element.content.strip()
             if len(text) >= 10:  # skip trivial whitespace or single symbols
+                chunk_id = element.chunk_id or f"{doc.file_name}_p{element.page_number}_e{idx}"
                 self.chunks.append({
+                    "chunk_id": chunk_id,
                     "file_name": doc.file_name,
                     "page_number": element.page_number,
                     "element_type": element.element_type,
@@ -56,3 +60,28 @@ class VectorRetriever:
             results.append(chunk)
 
         return results
+
+    def save_to_disk(self, dir_path: str = "data/vector_cache"):
+        """Saves chunks metadata and embeddings array to disk."""
+        path = Path(dir_path)
+        path.mkdir(parents=True, exist_ok=True)
+        with open(path / "chunks.json", "w", encoding="utf-8") as f:
+            json.dump(self.chunks, f, ensure_ascii=False, indent=2)
+        if self.embeddings is not None:
+            np.save(path / "embeddings.npy", self.embeddings)
+
+    def load_from_disk(self, dir_path: str = "data/vector_cache") -> bool:
+        """Loads chunks metadata and embeddings array from disk. Returns True if successful."""
+        path = Path(dir_path)
+        chunks_file = path / "chunks.json"
+        emb_file = path / "embeddings.npy"
+        if not chunks_file.exists():
+            return False
+        try:
+            with open(chunks_file, "r", encoding="utf-8") as f:
+                self.chunks = json.load(f)
+            if emb_file.exists():
+                self.embeddings = np.load(emb_file)
+            return True
+        except Exception:
+            return False
