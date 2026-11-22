@@ -54,4 +54,15 @@ def test_audit_endpoint(client):
     assert "query" in data
     assert "answer" in data
     assert "findings" in data
+    assert "plan" in data
+    assert data["plan"]["route"] in ("GRAPH_AUDIT", "HYBRID")
     assert isinstance(data["findings"], list)
+
+
+def test_audit_natural_language_query(client):
+    res = client.post("/api/audit", json={"query": "Quelles sont les clauses de préavis applicables ?", "top_k": 2})
+    assert res.status_code == 200
+    data = res.json()
+    assert "plan" in data
+    assert data["plan"]["route"] == "SEMANTIC_SEARCH"
+    assert "answer" in data

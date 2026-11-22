@@ -167,7 +167,10 @@ def audit_query(req: AuditRequest):
 
     return {
         "query": req.query,
+        "plan": retrieval_result.get("plan"),
         "detected_invoice": retrieval_result.get("detected_invoice"),
+        "detected_entity": retrieval_result.get("detected_entity"),
+        "detected_entity_type": retrieval_result.get("detected_entity_type"),
         "answer": answer.answer,
         "findings": [f.model_dump() for f in answer.findings],
         "evidence": [e.model_dump() for e in answer.evidence],
