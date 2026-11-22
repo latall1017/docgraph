@@ -20,6 +20,12 @@ def test_extract_invoice_with_po_relation():
     assert rel.relation_type == "REFERS_TO"
     assert rel.target_id == "BC-2026-001"
 
+    # Traceability checks
+    assert inv.chunk_id is not None
+    assert "invoice_FAC-2026-001.pdf_p1_" in inv.chunk_id
+    assert inv.page_number == 1
+    assert rel.chunk_id is not None
+
 
 def test_extract_orphan_invoice_has_no_po_relation():
     pdf = "data/synthetic/documents/SUP-004_Delta_Consulting/invoice_FAC-2026-004.pdf"

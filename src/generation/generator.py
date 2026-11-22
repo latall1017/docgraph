@@ -72,15 +72,33 @@ class AnswerGenerator:
         # 2. Format graph audit context
         audit = retrieval_result.get("graph_audit")
         if audit:
-            graph_lines = [
-                f"- Audited Invoice: {audit.get('invoice_id')} (Amount: {audit.get('invoice_amount_ht')} EUR)",
-                f"- Associated Purchase Order: {audit.get('po_id')} (Amount: {audit.get('po_amount_ht')} EUR)",
-                f"- Amount Discrepancy: {audit.get('amount_diff')} EUR (Exceeds PO: {audit.get('exceeds_po')})",
-                f"- Framework Contract: {audit.get('contract_id')} (Initial Ceiling: {audit.get('contract_ceiling')} EUR)",
-                f"- Modifying Amendment: {audit.get('amendment_id')} (Effective Ceiling: {audit.get('effective_ceiling')} EUR)",
-                f"- Cumulative Contract Spend: {audit.get('cumulative_contract_amount')} EUR (Exceeds Cumulative Ceiling: {audit.get('exceeds_contract_cumulative')})",
-                f"- Justified by Amendment: {audit.get('justified_by_amendment')}",
-            ]
+            entity_type = audit.get("entity_type")
+            if entity_type == "PurchaseOrder":
+                graph_lines = [
+                    f"- Audited Purchase Order: {audit.get('po_id')} (Amount: {audit.get('po_amount_ht')} EUR)",
+                    f"- Governing Contract: {audit.get('contract_id')} (Effective Ceiling: {audit.get('effective_ceiling')} EUR)",
+                    f"- Invoices Referencing PO: {audit.get('invoices')} (Total Invoiced: {audit.get('total_invoiced_ht')} EUR)",
+                    f"- Exceeds PO: {audit.get('exceeds_po')} (Difference: {audit.get('amount_diff')} EUR)",
+                    f"- Exceeds Contract Ceiling: {audit.get('exceeds_contract')}",
+                ]
+            elif entity_type == "Contract":
+                graph_lines = [
+                    f"- Audited Contract: {audit.get('contract_id')} (Initial Ceiling: {audit.get('initial_ceiling')} EUR, Effective: {audit.get('effective_ceiling')} EUR)",
+                    f"- Applied Amendments: {audit.get('applied_amendments')}",
+                    f"- Purchase Orders: {audit.get('purchase_orders')} (Total Committed: {audit.get('total_po_committed')} EUR)",
+                    f"- Linked Invoices: {audit.get('invoices')} (Total Invoiced: {audit.get('total_invoiced')} EUR)",
+                    f"- Remaining Budget: {audit.get('remaining_budget')} EUR (Exceeds Ceiling: {audit.get('exceeds_ceiling')})",
+                ]
+            else:
+                graph_lines = [
+                    f"- Audited Invoice: {audit.get('invoice_id')} (Amount: {audit.get('invoice_amount_ht')} EUR)",
+                    f"- Associated Purchase Order: {audit.get('po_id')} (Amount: {audit.get('po_amount_ht')} EUR)",
+                    f"- Amount Discrepancy: {audit.get('amount_diff')} EUR (Exceeds PO: {audit.get('exceeds_po')})",
+                    f"- Framework Contract: {audit.get('contract_id')} (Initial Ceiling: {audit.get('contract_ceiling')} EUR)",
+                    f"- Modifying Amendment: {audit.get('amendment_id')} (Effective Ceiling: {audit.get('effective_ceiling')} EUR)",
+                    f"- Cumulative Contract Spend: {audit.get('cumulative_contract_amount')} EUR (Exceeds Cumulative Ceiling: {audit.get('exceeds_contract_cumulative')})",
+                    f"- Justified by Amendment: {audit.get('justified_by_amendment')}",
+                ]
             graph_text = "\n".join(graph_lines)
         else:
             graph_text = "No graph relations found."

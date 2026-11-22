@@ -26,6 +26,7 @@ def parse_pdf(file_path: str) -> ParsedDocument:
             if data:
                 elements.append(
                     DocumentElement(
+                        chunk_id=f"{path.name}_p{page_num}_e{len(elements)}",
                         element_type="table",
                         content="\n".join([" | ".join([str(c or "") for c in row]) for row in data]),
                         page_number=page_num,
@@ -40,6 +41,7 @@ def parse_pdf(file_path: str) -> ParsedDocument:
             if text:
                 elements.append(
                     DocumentElement(
+                        chunk_id=f"{path.name}_p{page_num}_e{len(elements)}",
                         element_type="paragraph",
                         content=text,
                         page_number=page_num,

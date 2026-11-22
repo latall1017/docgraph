@@ -2,9 +2,8 @@
 
 import re
 from typing import Optional
-from src.ingestion.models import ParsedDocument
 from src.extraction.schema import ExtractedEntity, ExtractedRelation, ExtractionResult
-
+from src.ingestion.models import DocumentElement, ParsedDocument
 
 def parse_currency(amount_str: str) -> float:
     """Converts a formatted currency string to float handling French and international formats."""
@@ -29,6 +28,13 @@ def parse_currency(amount_str: str) -> float:
     except ValueError:
         return 0.0
 
+def find_element(doc : ParsedDocument , snippet : str) -> Optional[DocumentElement] : 
+    """Find the DocumentElement which contains the snippet."""
+    for el in doc.elements : 
+        if snippet in el.content : 
+            return el 
+    return None
+
 
 def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
     """Extracts entities and relationships from a parsed document using deterministic rules."""
@@ -39,7 +45,15 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
     if "FACTURE" in text:
         ref_match = re.search(r"FACTURE\s+([A-Z0-9_-]+)", text)
         if ref_match:
+
+            
             inv_ref = ref_match.group(1)
+            evidence_text = ref_match.group(0)
+
+
+            el = find_element(doc, evidence_text)
+            page_num = el.page_number if el else 1
+            chunk_id = el.chunk_id if el else None
             ht_match = re.search(r"Total HT\s*:\s*([\d\s,.]+)\s*€", text)
             ttc_match = re.search(r"Total TTC\s*:\s*([\d\s,.]+)\s*€", text)
 
@@ -49,14 +63,18 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
             if ttc_match:
                 properties["amount_ttc"] = parse_currency(ttc_match.group(1))
 
+            # Now we check witwhich element we are with the given infos.
+
+
             result.entities.append(
                 ExtractedEntity(
                     id=inv_ref,
                     entity_type="Invoice",
                     name=f"Invoice {inv_ref}",
                     properties=properties,
-                    evidence=ref_match.group(0),
-                    page_number=1,
+                    evidence=evidence_text,
+                    chunk_id= chunk_id,
+                    page_number= page_num,
                 )
             )
 
@@ -64,12 +82,15 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
             po_match = re.search(r"Bon de commande associé\s*:\s*(BC-[A-Z0-9_-]+)", text)
             if po_match:
                 po_ref = po_match.group(1)
+                po_evidence = po_match.group(0)
+                po_el = find_element(doc,po_evidence)
                 result.relations.append(
                     ExtractedRelation(
                         source_id=inv_ref,
                         relation_type="REFERS_TO",
                         target_id=po_ref,
-                        evidence=po_match.group(0),
+                        evidence=po_evidence,
+                        chunk_id = po_el.chunk_id if po_el else None, 
                     )
                 )
 
@@ -78,6 +99,11 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
         ref_match = re.search(r"BON DE COMMANDE\s+([A-Z0-9_-]+)", text)
         if ref_match:
             po_ref = ref_match.group(1)
+            po_evidence = ref_match.group(0)
+            po_el = find_element(doc, po_evidence)
+            page_num = po_el.page_number if po_el else 1
+            chunk_id = po_el.chunk_id if po_el else None
+
             ht_match = re.search(r"Total HT\s*:\s*([\d\s,.]+)\s*€", text)
             properties = {}
             if ht_match:
@@ -89,8 +115,9 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
                     entity_type="PurchaseOrder",
                     name=f"Purchase Order {po_ref}",
                     properties=properties,
-                    evidence=ref_match.group(0),
-                    page_number=1,
+                    evidence=po_evidence,
+                    chunk_id=chunk_id,
+                    page_number=page_num,
                 )
             )
 
@@ -98,12 +125,15 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
             con_match = re.search(r"Contrat cadre\s*:\s*([A-Z0-9_-]+)", text)
             if con_match:
                 con_ref = con_match.group(1)
+                con_evidence = con_match.group(0)
+                con_el = find_element(doc, con_evidence)
                 result.relations.append(
                     ExtractedRelation(
                         source_id=po_ref,
                         relation_type="GOVERNED_BY",
                         target_id=con_ref,
-                        evidence=con_match.group(0),
+                        evidence=con_evidence,
+                        chunk_id=con_el.chunk_id if con_el else None,
                     )
                 )
 
@@ -112,6 +142,11 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
         ref_match = re.search(r"Référence\s*:\s*([A-Z0-9_-]+)", text)
         if ref_match:
             con_ref = ref_match.group(1)
+            con_evidence = ref_match.group(0)
+            con_el = find_element(doc, con_evidence)
+            page_num = con_el.page_number if con_el else 1
+            chunk_id = con_el.chunk_id if con_el else None
+
             max_match = re.search(r"plafond global de\s*([\d\s,.]+)\s*€", text)
             properties = {}
             if max_match:
@@ -123,8 +158,9 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
                     entity_type="Contract",
                     name=f"Contract {con_ref}",
                     properties=properties,
-                    evidence=ref_match.group(0),
-                    page_number=1,
+                    evidence=con_evidence,
+                    chunk_id=chunk_id,
+                    page_number=page_num,
                 )
             )
 
@@ -133,6 +169,11 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
         ref_match = re.search(r"AVENANT N°\s*([A-Z0-9_-]+)", text)
         if ref_match:
             amend_ref = ref_match.group(1)
+            amend_evidence = ref_match.group(0)
+            amend_el = find_element(doc, amend_evidence)
+            page_num = amend_el.page_number if amend_el else 1
+            chunk_id = amend_el.chunk_id if amend_el else None
+
             new_max_match = re.search(r"nouveau montant de\s*([\d\s,.]+)\s*€", text)
             properties = {}
             if new_max_match:
@@ -144,8 +185,9 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
                     entity_type="Amendment",
                     name=f"Amendment {amend_ref}",
                     properties=properties,
-                    evidence=ref_match.group(0),
-                    page_number=1,
+                    evidence=amend_evidence,
+                    chunk_id=chunk_id,
+                    page_number=page_num,
                 )
             )
 
@@ -153,12 +195,15 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
             con_match = re.search(r"Contrat concerné\s*:\s*([A-Z0-9_-]+)", text)
             if con_match:
                 target_con = con_match.group(1)
+                con_evidence = con_match.group(0)
+                con_el = find_element(doc, con_evidence)
                 result.relations.append(
                     ExtractedRelation(
                         source_id=amend_ref,
                         relation_type="MODIFIES",
                         target_id=target_con,
-                        evidence=con_match.group(0),
+                        evidence=con_evidence,
+                        chunk_id=con_el.chunk_id if con_el else None,
                     )
                 )
 

@@ -182,3 +182,183 @@ class GraphRetriever:
                 )
 
         return report
+
+    def audit_po(self, po_id: str) -> Dict[str, Any]:
+        """Audits a purchase order against its governing contract and referencing invoices."""
+        po_node = self.kg.get_node(po_id)
+        if not po_node:
+            return {"status": "not_found", "message": f"Purchase Order {po_id} not found in graph."}
+
+        po_amount = po_node.get("properties", {}).get("amount_ht", 0.0)
+        report: Dict[str, Any] = {
+            "entity_type": "PurchaseOrder",
+            "po_id": po_id,
+            "po_amount_ht": po_amount,
+            "contract_id": None,
+            "contract_ceiling": None,
+            "effective_ceiling": None,
+            "applied_amendments": [],
+            "exceeds_contract": False,
+            "invoices": [],
+            "total_invoiced_ht": 0.0,
+            "amount_diff": 0.0,
+            "exceeds_po": False,
+            "evidence": [po_node.get("evidence", "")] if po_node.get("evidence") else [],
+        }
+
+        # 1. Hop 1: Governing Contract (GOVERNED_BY)
+        con_id = None
+        for rel in self.kg.get_outgoing_relations(po_id):
+            if rel.get("relation_type") == "GOVERNED_BY":
+                con_id = rel["target_id"]
+                if rel.get("evidence"):
+                    report["evidence"].append(rel["evidence"])
+                break
+
+        if con_id:
+            con_node = self.kg.get_node(con_id)
+            report["contract_id"] = con_id
+            initial_ceiling = con_node.get("properties", {}).get("maximum_amount") if con_node else None
+            report["contract_ceiling"] = initial_ceiling
+            effective_ceiling = initial_ceiling
+
+            # Check amendments modifying this contract
+            amendments = []
+            for src_node, _, edge_data in self.kg.graph.in_edges(con_id, data=True):
+                if edge_data.get("relation_type") == "MODIFIES":
+                    amend_node = self.kg.get_node(src_node)
+                    if amend_node:
+                        props = amend_node.get("properties", {})
+                        new_ceiling = props.get("new_maximum_amount")
+                        amend_date = str(props.get("date") or "")
+                        amendments.append({
+                            "id": src_node,
+                            "date": amend_date,
+                            "new_ceiling": new_ceiling,
+                            "evidence": edge_data.get("evidence", ""),
+                        })
+
+            if amendments:
+                amendments.sort(key=lambda a: (a["date"], a["id"]))
+                report["applied_amendments"] = [a["id"] for a in amendments]
+                for a in amendments:
+                    if a["new_ceiling"] is not None:
+                        effective_ceiling = a["new_ceiling"]
+                    if a["evidence"] and a["evidence"] not in report["evidence"]:
+                        report["evidence"].append(a["evidence"])
+
+            report["effective_ceiling"] = effective_ceiling
+            if effective_ceiling is not None:
+                report["exceeds_contract"] = po_amount > effective_ceiling
+
+        # 2. Invoices referencing this PO (incoming REFERS_TO)
+        invoices = []
+        total_invoiced = 0.0
+        for u, _, edge_data in self.kg.graph.in_edges(po_id, data=True):
+            if edge_data.get("relation_type") == "REFERS_TO":
+                invoices.append(u)
+                u_node = self.kg.get_node(u)
+                if u_node:
+                    total_invoiced += u_node.get("properties", {}).get("amount_ht", 0.0)
+                if edge_data.get("evidence") and edge_data["evidence"] not in report["evidence"]:
+                    report["evidence"].append(edge_data["evidence"])
+
+        report["invoices"] = sorted(invoices)
+        report["total_invoiced_ht"] = round(total_invoiced, 2)
+        report["amount_diff"] = round(total_invoiced - po_amount, 2)
+        report["exceeds_po"] = report["amount_diff"] > 0
+
+        return report
+
+    def get_contract_summary(self, contract_id: str) -> Dict[str, Any]:
+        """Summarizes a contract, its amendments, associated purchase orders, and total spend."""
+        con_node = self.kg.get_node(contract_id)
+        if not con_node:
+            return {"status": "not_found", "message": f"Contract {contract_id} not found in graph."}
+
+        initial_ceiling = con_node.get("properties", {}).get("maximum_amount", 0.0)
+        report: Dict[str, Any] = {
+            "entity_type": "Contract",
+            "contract_id": contract_id,
+            "initial_ceiling": initial_ceiling,
+            "effective_ceiling": initial_ceiling,
+            "applied_amendments": [],
+            "purchase_orders": [],
+            "total_po_committed": 0.0,
+            "invoices": [],
+            "total_invoiced": 0.0,
+            "remaining_budget": initial_ceiling,
+            "exceeds_ceiling": False,
+            "evidence": [con_node.get("evidence", "")] if con_node.get("evidence") else [],
+        }
+
+        # 1. Amendments modifying this contract (MODIFIES)
+        amendments = []
+        effective_ceiling = initial_ceiling
+        for src_node, _, edge_data in self.kg.graph.in_edges(contract_id, data=True):
+            if edge_data.get("relation_type") == "MODIFIES":
+                amend_node = self.kg.get_node(src_node)
+                if amend_node:
+                    props = amend_node.get("properties", {})
+                    new_ceiling = props.get("new_maximum_amount")
+                    amend_date = str(props.get("date") or "")
+                    amendments.append({
+                        "id": src_node,
+                        "date": amend_date,
+                        "new_ceiling": new_ceiling,
+                        "evidence": edge_data.get("evidence", ""),
+                    })
+
+        if amendments:
+            amendments.sort(key=lambda a: (a["date"], a["id"]))
+            report["applied_amendments"] = [a["id"] for a in amendments]
+            for a in amendments:
+                if a["new_ceiling"] is not None:
+                    effective_ceiling = a["new_ceiling"]
+                if a["evidence"] and a["evidence"] not in report["evidence"]:
+                    report["evidence"].append(a["evidence"])
+
+        report["effective_ceiling"] = effective_ceiling
+
+        # 2. Purchase orders governed by this contract (GOVERNED_BY)
+        po_ids = set()
+        total_po = 0.0
+        contract_invoices = set()
+
+        for u, _, edge_data in self.kg.graph.in_edges(contract_id, data=True):
+            rel_type = edge_data.get("relation_type")
+            if rel_type == "GOVERNED_BY":
+                u_node = self.kg.get_node(u)
+                if u_node and u_node.get("entity_type") == "PurchaseOrder":
+                    po_ids.add(u)
+                    total_po += u_node.get("properties", {}).get("amount_ht", 0.0)
+                    if edge_data.get("evidence") and edge_data["evidence"] not in report["evidence"]:
+                        report["evidence"].append(edge_data["evidence"])
+
+                    # Also collect invoices on this PO
+                    for inv, _, inv_edge in self.kg.graph.in_edges(u, data=True):
+                        if inv_edge.get("relation_type") == "REFERS_TO":
+                            contract_invoices.add(inv)
+                elif u_node and u_node.get("entity_type") == "Invoice":
+                    contract_invoices.add(u)
+            elif rel_type == "REFERS_TO":
+                contract_invoices.add(u)
+
+        report["purchase_orders"] = sorted(list(po_ids))
+        report["total_po_committed"] = round(total_po, 2)
+
+        # 3. Sum total invoiced
+        total_invoiced = 0.0
+        for inv in contract_invoices:
+            inv_node = self.kg.get_node(inv)
+            if inv_node:
+                total_invoiced += inv_node.get("properties", {}).get("amount_ht", 0.0)
+
+        report["invoices"] = sorted(list(contract_invoices))
+        report["total_invoiced"] = round(total_invoiced, 2)
+
+        if effective_ceiling is not None:
+            report["remaining_budget"] = round(effective_ceiling - total_invoiced, 2)
+            report["exceeds_ceiling"] = total_invoiced > effective_ceiling
+
+        return report
