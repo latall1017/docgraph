@@ -4,6 +4,7 @@ import re
 from typing import List, Dict, Any, Optional
 from src.retrieval.vector_retriever import VectorRetriever
 from src.retrieval.graph_retriever import GraphRetriever
+from src.retrieval.query_planner import QueryPlanner, RouteType, QueryPlan
 
 
 def compute_rrf_score(rank: int, k: int = 60) -> float:
@@ -12,92 +13,67 @@ def compute_rrf_score(rank: int, k: int = 60) -> float:
 
 
 class HybridRetriever:
-    """Combines semantic vector search with graph traversal using Reciprocal Rank Fusion."""
+    """Combines semantic vector search with graph traversal using Reciprocal Rank Fusion and Query Planning."""
 
-    def __init__(self, vector_retriever: VectorRetriever, graph_retriever: GraphRetriever):
+    def __init__(
+        self,
+        vector_retriever: VectorRetriever,
+        graph_retriever: GraphRetriever,
+        planner: Optional[QueryPlanner] = None,
+    ):
         self.vector_retriever = vector_retriever
         self.graph_retriever = graph_retriever
+        self.planner = planner or QueryPlanner()
 
     def retrieve(self, query: str, top_k: int = 3) -> Dict[str, Any]:
-        """Performs hybrid retrieval: vector passages and graph reconciliation."""
-        # 1. Dense vector search
+        """Performs hybrid retrieval: vector passages and graph reconciliation using cascaded query planning."""
+        # 1. Determine execution plan via QueryPlanner (Tier 1 regex -> Tier 2 heuristic / LLM)
+        plan = self.planner.plan(
+            query=query,
+            kg=self.graph_retriever.kg,
+            vector_retriever=self.vector_retriever,
+        )
+
+        detected_entity = plan.entity_id
+        detected_entity_type = plan.entity_type
+        detected_invoice = plan.entity_id if plan.entity_type == "Invoice" else None
+
+        # 2. Dense vector search
         vector_results = self.vector_retriever.search(query, top_k=top_k)
 
-        # 2. Entity reference detection in query or top results (Entity Dispatcher)
-        detected_entity = None
-        detected_entity_type = None
-        detected_invoice = None
-
-        inv_match = re.search(r"\b(FAC-[A-Z0-9_-]+|INV-[A-Z0-9_-]+)\b", query, re.IGNORECASE)
-        po_match = re.search(r"\b(BC-[A-Z0-9_-]+|PO-[A-Z0-9_-]+)\b", query, re.IGNORECASE)
-        con_match = re.search(r"\b(CON-[A-Z0-9_-]+|CTR-[A-Z0-9_-]+)\b", query, re.IGNORECASE)
-        amend_match = re.search(r"\b(AVN-[A-Z0-9_-]+|AMD-[A-Z0-9_-]+)\b", query, re.IGNORECASE)
-
-        if inv_match:
-            detected_entity = inv_match.group(0).upper()
-            detected_entity_type = "Invoice"
-            detected_invoice = detected_entity
-        elif po_match:
-            detected_entity = po_match.group(0).upper()
-            detected_entity_type = "PurchaseOrder"
-        elif con_match:
-            detected_entity = con_match.group(0).upper()
-            detected_entity_type = "Contract"
-        elif amend_match:
-            detected_entity = amend_match.group(0).upper()
-            detected_entity_type = "Amendment"
-        elif vector_results:
-            # Only fallback to vector chunks if query expresses an explicit financial/audit intent
-            # Prevents query hijacking on general clauses (e.g., termination, notice, signatures)
-            audit_intent = any(kw in query.lower() for kw in [
-                "facture", "invoice", "payer", "paiement", "dépassement",
-                "conforme", "audit", "montant", "règlement", "bon de commande", "contrat", "budget"
-            ])
-            if audit_intent:
-                for chunk in vector_results:
-                    c_inv = re.search(r"\b(FAC-[A-Z0-9_-]+|INV-[A-Z0-9_-]+)\b", chunk["content"])
-                    c_po = re.search(r"\b(BC-[A-Z0-9_-]+|PO-[A-Z0-9_-]+)\b", chunk["content"])
-                    c_con = re.search(r"\b(CON-[A-Z0-9_-]+|CTR-[A-Z0-9_-]+)\b", chunk["content"])
-                    if c_inv:
-                        detected_entity = c_inv.group(0).upper()
-                        detected_entity_type = "Invoice"
-                        detected_invoice = detected_entity
-                        break
-                    elif c_po:
-                        detected_entity = c_po.group(0).upper()
-                        detected_entity_type = "PurchaseOrder"
-                        break
-                    elif c_con:
-                        detected_entity = c_con.group(0).upper()
-                        detected_entity_type = "Contract"
-                        break
-
-        # 3. Graph retrieval dispatch
+        # 3. Graph retrieval dispatch according to plan
         graph_audit = None
-        if detected_entity_type == "Invoice":
-            graph_audit = self.graph_retriever.audit_invoice(detected_entity)
-        elif detected_entity_type == "PurchaseOrder":
-            graph_audit = self.graph_retriever.audit_po(detected_entity)
-        elif detected_entity_type == "Contract":
-            graph_audit = self.graph_retriever.get_contract_summary(detected_entity)
-        elif detected_entity_type == "Amendment":
-            # For amendment, inspect modifying relation to target contract
-            target_con = None
-            if detected_entity in self.graph_retriever.kg.graph:
-                for _, tgt, edata in self.graph_retriever.kg.graph.out_edges(detected_entity, data=True):
-                    if edata.get("relation_type") == "MODIFIES":
-                        target_con = tgt
-                        break
-            if target_con:
-                graph_audit = self.graph_retriever.get_contract_summary(target_con)
-            else:
-                amend_node = self.graph_retriever.kg.get_node(detected_entity)
-                graph_audit = {
-                    "entity_type": "Amendment",
-                    "amendment_id": detected_entity,
-                    "properties": amend_node.get("properties") if amend_node else {},
-                    "evidence": [amend_node.get("evidence", "")] if amend_node else [],
-                }
+        if plan.route in (RouteType.GRAPH_AUDIT, RouteType.HYBRID) and plan.entity_id:
+            if plan.entity_type == "Invoice":
+                graph_audit = self.graph_retriever.audit_invoice(plan.entity_id)
+            elif plan.entity_type == "PurchaseOrder":
+                graph_audit = self.graph_retriever.audit_po(plan.entity_id)
+            elif plan.entity_type == "Contract":
+                graph_audit = self.graph_retriever.get_contract_summary(plan.entity_id)
+            elif plan.entity_type == "Amendment":
+                # For amendment, inspect modifying relation to target contract
+                target_con = None
+                if plan.entity_id in self.graph_retriever.kg.graph:
+                    for _, tgt, edata in self.graph_retriever.kg.graph.out_edges(plan.entity_id, data=True):
+                        if edata.get("relation_type") == "MODIFIES":
+                            target_con = tgt
+                            break
+                if target_con:
+                    graph_audit = self.graph_retriever.get_contract_summary(target_con)
+                else:
+                    amend_node = self.graph_retriever.kg.get_node(plan.entity_id)
+                    graph_audit = {
+                        "entity_type": "Amendment",
+                        "amendment_id": plan.entity_id,
+                        "properties": amend_node.get("properties") if amend_node else {},
+                        "evidence": [amend_node.get("evidence", "")] if amend_node else [],
+                    }
+        else:
+            # If route is purely SEMANTIC_SEARCH or no entity resolved, clear entity labels
+            if plan.route == RouteType.SEMANTIC_SEARCH:
+                detected_entity = None
+                detected_entity_type = None
+                detected_invoice = None
 
         # 4. RRF scoring and deduplication
         fused_items: Dict[str, Dict[str, Any]] = {}
@@ -138,4 +114,5 @@ class HybridRetriever:
             "detected_invoice": detected_invoice,
             "graph_audit": graph_audit,
             "ranked_evidence": ranked_evidence[:top_k],
+            "plan": plan.model_dump(),
         }

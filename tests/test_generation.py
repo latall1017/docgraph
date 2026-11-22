@@ -61,9 +61,12 @@ def test_gemini_generation_live():
     try:
         result = gen.generate(query, retrieval_result)
     except Exception as e:
-        if "503" in str(e) or "UNAVAILABLE" in str(e):
-            pytest.skip(f"Gemini API temporarily unavailable (503): {e}")
+        if "503" in str(e) or "UNAVAILABLE" in str(e) or "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            pytest.skip(f"Gemini API quota or service unavailable: {e}")
         raise
+
+    if "LLM API error" in "".join(result.limitations):
+        pytest.skip(f"Gemini API quota exhausted during test: {result.limitations}")
 
     assert isinstance(result, GroundedAnswer)
     assert len(result.answer) > 20

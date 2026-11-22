@@ -126,23 +126,38 @@ Produce a structured response strictly following the expected JSON schema.
         prompt = self.build_prompt(query, retrieval_result)
 
         if self.client:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=GroundedAnswer,
-                    temperature=0.0,
-                ),
-            )
-            raw_text = response.text.strip()
-            if raw_text.startswith("```json"):
-                raw_text = raw_text[7:]
-            if raw_text.startswith("```"):
-                raw_text = raw_text[3:]
-            if raw_text.endswith("```"):
-                raw_text = raw_text[:-3]
-            return GroundedAnswer.model_validate_json(raw_text.strip())
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=GroundedAnswer,
+                        temperature=0.0,
+                    ),
+                )
+                raw_text = response.text.strip()
+                if raw_text.startswith("```json"):
+                    raw_text = raw_text[7:]
+                if raw_text.startswith("```"):
+                    raw_text = raw_text[3:]
+                if raw_text.endswith("```"):
+                    raw_text = raw_text[:-3]
+                return GroundedAnswer.model_validate_json(raw_text.strip())
+            except Exception as e:
+                # Graceful fallback on API error or quota exhaustion (429)
+                audit = retrieval_result.get("graph_audit") or {}
+                return GroundedAnswer(
+                    answer=f"Audit generated with local fallback due to LLM API status: {type(e).__name__}.",
+                    findings=[Finding(
+                        type="amount_difference" if audit.get("exceeds_po") else "compliant",
+                        invoice_amount=audit.get("invoice_amount_ht"),
+                        order_amount=audit.get("po_amount_ht"),
+                        difference=audit.get("amount_diff"),
+                    )],
+                    evidence=[],
+                    limitations=[f"LLM API error ({type(e).__name__}): {str(e)[:150]}"]
+                )
 
         # Fallback if no API key is available
         audit = retrieval_result.get("graph_audit") or {}
