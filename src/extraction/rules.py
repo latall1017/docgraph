@@ -47,10 +47,16 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
     """Extracts entities and relationships from a parsed document using robust deterministic rules."""
     text = doc.raw_text
     result = ExtractionResult(document_name=doc.file_name)
+    referenced_pos_set = set()
+    referenced_cons_set = set()
 
     # 1. Invoice (FACTURE / INVOICE / NOTE D'HONORAIRES)
-    inv_match = re.search(r"(?:FACTURE|INVOICE|NOTE\s+D'HONORAIRES)\s+(?:N°|#)?\s*([A-Z0-9_-]+)", text, re.IGNORECASE)
-    if inv_match:
+    inv_match = re.search(
+        r"(?:FACTURE|INVOICE|NOTE\s+D'HONORAIRES)(?:\s+(?:N°|#|NO\.?|NUMBER|NUMÉRO|NUM))?\s*[:#]?\s*([A-Z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if inv_match and inv_match.group(1).upper() not in ("NUMBER", "NO", "REF", "NUMERO", "NUM", "ASSOCIE"):
         inv_ref = inv_match.group(1).upper()
         evidence_text = inv_match.group(0)
 
@@ -102,6 +108,7 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
                 code_up = po_code.upper()
                 if code_up not in seen_pos and code_up not in ("NON", "AUCUN", "NULL", "NONE"):
                     seen_pos.add(code_up)
+                    referenced_pos_set.add(code_up)
                     po_evidence = pm.group(0)
                     po_el = find_element(doc, po_evidence)
                     result.relations.append(
@@ -114,9 +121,44 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
                         )
                     )
 
+        # Check for directly referenced contract(s) on the invoice
+        con_matches = list(re.finditer(
+            r"(?:contrat(?:\s+cadre|\s+associé)?|governing\s+agreement|governing\s+contract|contract(?:\s+ref\.?)?)\s*[:]?\s*([^\n\r]+)",
+            text,
+            re.IGNORECASE,
+        ))
+        seen_cons = set()
+        for cm in con_matches:
+            line = cm.group(1)
+            found_cons = re.findall(r"\b(CON-[A-Z0-9_-]+|CTR-[A-Z0-9_-]+)\b", line, re.IGNORECASE)
+            for con_code in found_cons:
+                code_up = con_code.upper()
+                if code_up not in seen_cons and code_up not in ("NON", "AUCUN", "NULL", "NONE"):
+                    seen_cons.add(code_up)
+                    referenced_cons_set.add(code_up)
+                    con_evidence = cm.group(0)
+                    con_el = find_element(doc, con_evidence)
+                    result.relations.append(
+                        ExtractedRelation(
+                            source_id=inv_ref,
+                            relation_type="GOVERNED_BY",
+                            target_id=code_up,
+                            evidence=con_evidence,
+                            chunk_id=con_el.chunk_id if con_el else None,
+                        )
+                    )
+
     # 2. Purchase Order (BON DE COMMANDE / PURCHASE ORDER / ORDRE D'ACHAT)
-    po_match = re.search(r"(?:BON\s+DE\s+COMMANDE|PURCHASE\s+ORDER|ORDRE\s+D'ACHAT)(?!\s+associ[ée]s?)\s+(?:N°|#)?\s*([A-Z0-9_-]+)", text, re.IGNORECASE)
-    if po_match and po_match.group(1).upper() not in ("ASSOCIE", "ASSOCIEE", "ASSOCIES", "ASSOCIEES", "NON", "AUCUN"):
+    po_match = re.search(
+        r"(?:BON\s+DE\s+COMMANDE|PURCHASE\s+ORDER|ORDRE\s+D'ACHAT)(?!\s+associ[ée]s?)(?:\s+(?:N°|#|NO\.?|NUMBER|NUMÉRO|NUM))?\s*[:#]?\s*([A-Z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if (
+        po_match
+        and po_match.group(1).upper() not in referenced_pos_set
+        and po_match.group(1).upper() not in ("NUMBER", "NO", "REF", "NUMERO", "NUM", "ASSOCIE", "ASSOCIEE", "ASSOCIES", "ASSOCIEES", "NON", "AUCUN")
+    ):
         po_ref = po_match.group(1).upper()
         evidence_text = po_match.group(0)
 
@@ -183,7 +225,7 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
         if not ref_match:
             ref_match = re.search(r"\b(CON-[A-Z0-9_-]+|CTR-[A-Z0-9_-]+)\b", text, re.IGNORECASE)
 
-        if ref_match:
+        if ref_match and ref_match.group(1).upper() not in referenced_cons_set:
             con_ref = ref_match.group(1).upper()
             evidence_text = ref_match.group(0)
 
@@ -213,8 +255,12 @@ def extract_from_parsed_document(doc: ParsedDocument) -> ExtractionResult:
             )
 
     # 4. Amendment (AVENANT / AMENDMENT)
-    amend_match = re.search(r"(?:AVENANT\s*(?:N°|#)?|AMENDMENT\s*(?:N°|#)?)\s*([A-Z0-9_-]+)", text, re.IGNORECASE)
-    if amend_match:
+    amend_match = re.search(
+        r"(?:AVENANT|AMENDMENT)(?:\s+(?:N°|#|NO\.?|NUMBER|NUMÉRO|NUM))?\s*[:#]?\s*([A-Z0-9_-]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if amend_match and amend_match.group(1).upper() not in ("NUMBER", "NO", "REF", "NUMERO", "NUM"):
         amend_ref = amend_match.group(1).upper()
         evidence_text = amend_match.group(0)
 

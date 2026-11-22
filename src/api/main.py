@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 
 from src.graph.graph_builder import KnowledgeGraph
 from src.ingestion.pdf_parser import parse_pdf
-from src.extraction.rules import extract_from_parsed_document
+from src.extraction.cascade_extractor import extract_document_cascaded
 from src.retrieval.vector_retriever import VectorRetriever
 from src.retrieval.graph_retriever import GraphRetriever
 from src.retrieval.hybrid_retriever import HybridRetriever
@@ -48,7 +48,7 @@ def load_synthetic_documents(corpus_dir: str = "data/synthetic/documents", cache
         for pdf_path in pdf_files:
             try:
                 doc = parse_pdf(pdf_path)
-                extraction = extract_from_parsed_document(doc)
+                extraction = extract_document_cascaded(doc)
                 for entity in extraction.entities:
                     kg.add_entity(entity)
                 for relation in extraction.relations:
@@ -131,7 +131,7 @@ def ingest_document(req: IngestRequest):
     with ingest_lock:
         try:
             doc = parse_pdf(req.file_path)
-            extraction = extract_from_parsed_document(doc)
+            extraction = extract_document_cascaded(doc)
 
             for entity in extraction.entities:
                 kg.add_entity(entity)
